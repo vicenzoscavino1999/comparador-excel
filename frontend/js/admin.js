@@ -110,7 +110,8 @@ async function loadUsers() {
     tableEl.style.display = 'none';
 
     try {
-        const users = await apiFetch('/api/users');
+        const data = await apiFetch('/api/users');
+        const users = data.users || [];
 
         loadingEl.style.display = 'none';
 

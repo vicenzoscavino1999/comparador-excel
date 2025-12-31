@@ -42,46 +42,38 @@ def detect_column(df: pd.DataFrame, patterns: List[str]) -> Optional[str]:
 
 
 def read_excel_file(file_content: bytes, filename: str) -> pd.DataFrame:
-    """Read Excel file (supports both .xls and .xlsx) with all columns as text to preserve leading zeros"""
+    """Read Excel file (supports both .xls and .xlsx) with all columns as text to preserve leading zeros.
+    
+    Optimized: Only reads first 30 rows initially for header detection to reduce memory usage.
+    """
     file_buffer = io.BytesIO(file_content)
+    is_xls = filename.lower().endswith('.xls')
+    engine = 'xlrd' if is_xls else 'openpyxl'
     
-    # First read to detect structure (read everything as string to preserve leading zeros)
-    if filename.lower().endswith('.xls'):
-        # Old Excel format - read as string
-        df = pd.read_excel(file_buffer, engine='xlrd', header=None, dtype=str)
-    else:
-        # New Excel format (.xlsx) - read as string
-        df = pd.read_excel(file_buffer, engine='openpyxl', header=None, dtype=str)
+    # OPTIMIZATION: Read only first 30 rows for header detection (saves RAM for large files)
+    header_sample = pd.read_excel(file_buffer, engine=engine, header=None, dtype=str, nrows=30)
     
-    # Try to find the header row (look in first 30 rows for better detection)
+    # Try to find the header row in the sample
     header_row = None
-    for i in range(min(30, len(df))):
-        row_values = [str(v).lower().strip() for v in df.iloc[i].tolist()]
-        # Check if this row contains header-like words
-        header_keywords = ['codigo', 'código', 'cod', 'producto', 'descripcion', 'descripción', 
-                          'cantidad', 'cant', 'stock', 'unidades', 'total', 'item', 'articulo',
-                          'artículo', 'material', 'referencia', 'nombre', 'detalle']
+    header_keywords = ['codigo', 'código', 'cod', 'producto', 'descripcion', 'descripción', 
+                      'cantidad', 'cant', 'stock', 'unidades', 'total', 'item', 'articulo',
+                      'artículo', 'material', 'referencia', 'nombre', 'detalle']
+    
+    for i in range(len(header_sample)):
+        row_values = [str(v).lower().strip() for v in header_sample.iloc[i].tolist()]
         matches = sum(1 for v in row_values for kw in header_keywords if kw in v.lower())
         if matches >= 2:  # At least 2 header keywords found
             header_row = i
             break
     
-    # Re-read with proper header (always as string to preserve leading zeros)
+    # Now read the full file with the detected header
     file_buffer.seek(0)
-    if filename.lower().endswith('.xls'):
-        if header_row is not None:
-            df = pd.read_excel(file_buffer, engine='xlrd', header=header_row, dtype=str)
-        else:
-            # No headers found, use positional columns
-            df = pd.read_excel(file_buffer, engine='xlrd', header=None, dtype=str)
-            # Assign generic column names based on position
-            df = assign_positional_columns(df)
+    if header_row is not None:
+        df = pd.read_excel(file_buffer, engine=engine, header=header_row, dtype=str)
     else:
-        if header_row is not None:
-            df = pd.read_excel(file_buffer, engine='openpyxl', header=header_row, dtype=str)
-        else:
-            df = pd.read_excel(file_buffer, engine='openpyxl', header=None, dtype=str)
-            df = assign_positional_columns(df)
+        # No headers found, use positional columns
+        df = pd.read_excel(file_buffer, engine=engine, header=None, dtype=str)
+        df = assign_positional_columns(df)
     
     return df
 
@@ -122,19 +114,24 @@ def assign_positional_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def clean_code_format(code: str) -> str:
-    """Clean code format: remove .0 suffix from codes that Excel converted to float"""
+    """Clean code format: remove .0 suffix from codes that Excel converted to float.
+    
+    Uses Decimal for precision with long codes (>15 digits) instead of float.
+    """
+    from decimal import Decimal, InvalidOperation
+    
     code = str(code).strip().upper()
     # Remove .0 suffix (e.g., '806.0' -> '806')
     if code.endswith('.0'):
         code = code[:-2]
-    # Handle scientific notation (e.g., '1.23E+10' -> full number)
+    # Handle scientific notation (e.g., '1.23E+10' -> full number) using Decimal for precision
     try:
-        if 'E' in code.upper() or 'e' in code:
-            # It's scientific notation, convert to full integer string
-            num = float(code)
-            if num == int(num):
-                code = str(int(num))
-    except (ValueError, OverflowError):
+        if 'E' in code.upper():
+            # Use Decimal to preserve precision for long codes
+            dec_val = Decimal(code)
+            if dec_val == dec_val.to_integral_value():
+                code = str(int(dec_val))
+    except (InvalidOperation, ValueError, OverflowError):
         pass
     return code
 

@@ -47,11 +47,11 @@ if IS_PRODUCTION:
         allow_headers=["Authorization", "Content-Type"],
     )
 else:
-    # Development: allow all
+    # Development: allow all (credentials=False required when using wildcard origins)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
-        allow_credentials=True,
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -275,13 +275,12 @@ async def compare_files(
         
         logger.info(f"Comparison complete for {username}: {info['results']['total_compared']} records, {info['results']['with_differences']} differences")
         
-        # Return the Excel file
+        # Return the Excel file (comparison info is already logged, no need for fragile HTTP header)
         return Response(
             content=output_bytes,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={
-                "Content-Disposition": "attachment; filename=comparacion_resultado.xlsx",
-                "X-Comparison-Info": str(info).replace("'", '"')
+                "Content-Disposition": "attachment; filename=comparacion_resultado.xlsx"
             }
         )
         
