@@ -2,11 +2,21 @@ from datetime import datetime, timedelta
 from typing import Optional
 import json
 import os
+import secrets
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 
-# Configuration
-SECRET_KEY = os.getenv("SECRET_KEY", "tu-clave-secreta-cambiar-en-produccion-2024")
+# Configuration - SECRET_KEY must be set in production
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    # Check if we're in production (Render sets RENDER env var)
+    if os.getenv("RENDER"):
+        raise RuntimeError("SECRET_KEY environment variable must be set in production!")
+    else:
+        # Development mode - generate a random key (will change on restart)
+        SECRET_KEY = secrets.token_hex(32)
+        print("⚠️  WARNING: Using auto-generated SECRET_KEY. Set SECRET_KEY env var for production.")
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 
