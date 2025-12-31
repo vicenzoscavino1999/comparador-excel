@@ -266,6 +266,10 @@ async def serve_index():
 async def serve_app():
     return FileResponse(os.path.join(FRONTEND_DIR, "app.html"))
 
+@app.get("/admin.html")
+async def serve_admin_html():
+    return FileResponse(os.path.join(FRONTEND_DIR, "admin.html"))
+
 
 # Mount static files
 if os.path.exists(FRONTEND_DIR):
