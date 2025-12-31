@@ -270,6 +270,10 @@ async def serve_app():
 async def get_version():
     return {"version": "2.1", "feature": "admin_panel"}
 
+@app.get("/admin")
+async def serve_admin():
+    return FileResponse(os.path.join(FRONTEND_DIR, "admin.html"))
+
 @app.get("/admin.html")
 async def serve_admin_html():
     return FileResponse(os.path.join(FRONTEND_DIR, "admin.html"))
