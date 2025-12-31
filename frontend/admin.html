@@ -245,21 +245,21 @@
         // Check authentication
         function checkAuth() {
             const token = localStorage.getItem('token');
-            const user = localStorage.getItem('user');
+            const username = localStorage.getItem('username');
 
-            if (!token || !user) {
+            if (!token || !username) {
                 window.location.href = '/';
                 return null;
             }
 
-            document.getElementById('userDisplay').textContent = user;
-            return { token, user };
+            document.getElementById('userDisplay').textContent = username;
+            return { token, username };
         }
 
         // Logout
         document.getElementById('logoutBtn').addEventListener('click', () => {
             localStorage.removeItem('token');
-            localStorage.removeItem('user');
+            localStorage.removeItem('username');
             window.location.href = '/';
         });
 
