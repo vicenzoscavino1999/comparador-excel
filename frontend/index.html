@@ -54,34 +54,12 @@
             </form>
 
             <div class="auth-divider">
-                <span>o</span>
+                <span>·</span>
             </div>
 
-            <!-- Register Form (hidden by default) -->
-            <form id="registerForm" class="auth-form hidden">
-                <div class="form-group">
-                    <label for="regUsername">Usuario</label>
-                    <input type="text" id="regUsername" name="username" required
-                        placeholder="Elige un nombre de usuario">
-                </div>
-                <div class="form-group">
-                    <label for="regEmail">Email</label>
-                    <input type="email" id="regEmail" name="email" required placeholder="tu@email.com">
-                </div>
-                <div class="form-group">
-                    <label for="regPassword">Contraseña</label>
-                    <input type="password" id="regPassword" name="password" required placeholder="Mínimo 6 caracteres"
-                        minlength="6">
-                </div>
-                <button type="submit" class="btn btn-secondary">
-                    <span>Crear Cuenta</span>
-                </button>
-            </form>
-
-            <!-- Toggle between login/register -->
-            <div class="auth-toggle">
-                <p id="toggleText">¿No tienes cuenta?</p>
-                <button type="button" id="toggleBtn" class="btn-link">Regístrate aquí</button>
+            <!-- Contact admin message (registration is closed) -->
+            <div class="auth-info">
+                <p class="info-text">¿No tienes cuenta? Contacta al administrador para solicitar acceso.</p>
             </div>
 
             <!-- Error/Success messages -->

@@ -13,7 +13,7 @@ CODIGO_PATTERNS = [
     r'^c[oó]d\.?\s*producto.*$', r'^item$', r'^referencia.*$', r'^ref\.?$',
     r'^art[ií]culo.*$', r'^cod.*art.*$', r'^clave.*$', r'^num.*$',
     r'^n[uú]mero.*$', r'^parte.*$', r'^c[oó]d.*$', r'^barcode.*$',
-    r'^upc$', r'^ean$', r'^plu$', r'^material$'
+    r'^upc$', r'^ean$', r'^plu$'  # Removed 'material' - too ambiguous
 ]
 
 PRODUCTO_PATTERNS = [
@@ -42,19 +42,20 @@ def detect_column(df: pd.DataFrame, patterns: List[str]) -> Optional[str]:
 
 
 def read_excel_file(file_content: bytes, filename: str) -> pd.DataFrame:
-    """Read Excel file (supports both .xls and .xlsx)"""
+    """Read Excel file (supports both .xls and .xlsx) with all columns as text to preserve leading zeros"""
     file_buffer = io.BytesIO(file_content)
     
+    # First read to detect structure (read everything as string to preserve leading zeros)
     if filename.lower().endswith('.xls'):
-        # Old Excel format
-        df = pd.read_excel(file_buffer, engine='xlrd', header=None)
+        # Old Excel format - read as string
+        df = pd.read_excel(file_buffer, engine='xlrd', header=None, dtype=str)
     else:
-        # New Excel format (.xlsx)
-        df = pd.read_excel(file_buffer, engine='openpyxl', header=None)
+        # New Excel format (.xlsx) - read as string
+        df = pd.read_excel(file_buffer, engine='openpyxl', header=None, dtype=str)
     
-    # Try to find the header row (look in first 10 rows)
+    # Try to find the header row (look in first 30 rows for better detection)
     header_row = None
-    for i in range(min(10, len(df))):
+    for i in range(min(30, len(df))):
         row_values = [str(v).lower().strip() for v in df.iloc[i].tolist()]
         # Check if this row contains header-like words
         header_keywords = ['codigo', 'código', 'cod', 'producto', 'descripcion', 'descripción', 
@@ -65,22 +66,21 @@ def read_excel_file(file_content: bytes, filename: str) -> pd.DataFrame:
             header_row = i
             break
     
-    # Re-read with proper header
+    # Re-read with proper header (always as string to preserve leading zeros)
     file_buffer.seek(0)
     if filename.lower().endswith('.xls'):
         if header_row is not None:
-            df = pd.read_excel(file_buffer, engine='xlrd', header=header_row)
+            df = pd.read_excel(file_buffer, engine='xlrd', header=header_row, dtype=str)
         else:
             # No headers found, use positional columns
-            df = pd.read_excel(file_buffer, engine='xlrd', header=None)
+            df = pd.read_excel(file_buffer, engine='xlrd', header=None, dtype=str)
             # Assign generic column names based on position
-            # Assume: first numeric-like column = Código, last numeric-like column = Cantidad, middle = Producto
             df = assign_positional_columns(df)
     else:
         if header_row is not None:
-            df = pd.read_excel(file_buffer, engine='openpyxl', header=header_row)
+            df = pd.read_excel(file_buffer, engine='openpyxl', header=header_row, dtype=str)
         else:
-            df = pd.read_excel(file_buffer, engine='openpyxl', header=None)
+            df = pd.read_excel(file_buffer, engine='openpyxl', header=None, dtype=str)
             df = assign_positional_columns(df)
     
     return df
@@ -121,6 +121,84 @@ def assign_positional_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def clean_code_format(code: str) -> str:
+    """Clean code format: remove .0 suffix from codes that Excel converted to float"""
+    code = str(code).strip().upper()
+    # Remove .0 suffix (e.g., '806.0' -> '806')
+    if code.endswith('.0'):
+        code = code[:-2]
+    # Handle scientific notation (e.g., '1.23E+10' -> full number)
+    try:
+        if 'E' in code.upper() or 'e' in code:
+            # It's scientific notation, convert to full integer string
+            num = float(code)
+            if num == int(num):
+                code = str(int(num))
+    except (ValueError, OverflowError):
+        pass
+    return code
+
+
+def clean_quantity(value) -> float:
+    """Clean quantity value: handle thousands separators, decimal variations, spaces"""
+    if pd.isna(value) or value is None:
+        return 0.0
+    
+    val_str = str(value).strip()
+    if not val_str or val_str.upper() == 'NAN':
+        return 0.0
+    
+    # Remove spaces
+    val_str = val_str.replace(' ', '')
+    
+    # Handle different number formats:
+    # "1,234.56" (US/UK) -> 1234.56
+    # "1.234,56" (EU) -> 1234.56
+    # "1,234" could be 1234 (thousands) or 1.234 (decimal)
+    
+    # Count occurrences of . and ,
+    dots = val_str.count('.')
+    commas = val_str.count(',')
+    
+    if dots == 1 and commas == 0:
+        # Standard decimal: "1234.56"
+        pass
+    elif dots == 0 and commas == 1:
+        # Could be "1,234" (thousands) or "1,5" (EU decimal)
+        # If comma is in last 3 positions and only 1-2 digits after, treat as decimal
+        comma_pos = val_str.rfind(',')
+        after_comma = len(val_str) - comma_pos - 1
+        if after_comma <= 2:
+            # EU decimal format: "1,5" or "1,50"
+            val_str = val_str.replace(',', '.')
+        else:
+            # Thousands separator: "1,234"
+            val_str = val_str.replace(',', '')
+    elif dots >= 1 and commas >= 1:
+        # Mixed format
+        # If last separator is comma, it's EU: "1.234,56"
+        # If last separator is dot, it's US: "1,234.56"
+        last_dot = val_str.rfind('.')
+        last_comma = val_str.rfind(',')
+        if last_comma > last_dot:
+            # EU format: "1.234,56"
+            val_str = val_str.replace('.', '').replace(',', '.')
+        else:
+            # US format: "1,234.56"
+            val_str = val_str.replace(',', '')
+    elif commas > 1:
+        # Multiple commas = thousands separators: "1,234,567"
+        val_str = val_str.replace(',', '')
+    elif dots > 1:
+        # Multiple dots = thousands separators (EU): "1.234.567"
+        val_str = val_str.replace('.', '')
+    
+    try:
+        return float(val_str)
+    except ValueError:
+        return 0.0
+
+
 def clean_dataframe(df: pd.DataFrame, codigo_col: str, producto_col: Optional[str], cantidad_col: str) -> pd.DataFrame:
     """Clean the dataframe: remove duplicate headers, normalize data"""
     # Make a copy
@@ -131,15 +209,17 @@ def clean_dataframe(df: pd.DataFrame, codigo_col: str, producto_col: Optional[st
     mask = df[codigo_col].astype(str).str.lower().str.strip() != original_codigo_name.lower().strip()
     df = df[mask]
     
-    # Normalize codigo: convert to string, strip whitespace
-    df['Código'] = df[codigo_col].astype(str).str.strip().str.upper()
+    # Normalize codigo: convert to string, clean format to preserve leading zeros
+    df['Código'] = df[codigo_col].apply(clean_code_format)
     
-    # Normalize cantidad: convert to numeric
-    df['Cantidad'] = pd.to_numeric(df[cantidad_col], errors='coerce').fillna(0)
+    # Normalize cantidad: clean and convert to numeric (handles thousands separators, etc.)
+    df['Cantidad'] = df[cantidad_col].apply(clean_quantity)
     
     # Handle producto
     if producto_col:
         df['Producto'] = df[producto_col].astype(str).str.strip()
+        # Clean 'nan' strings
+        df['Producto'] = df['Producto'].replace({'nan': '', 'NaN': '', 'NAN': ''})
     else:
         df['Producto'] = ''
     
@@ -151,6 +231,22 @@ def clean_dataframe(df: pd.DataFrame, codigo_col: str, producto_col: Optional[st
     result = result[result['Código'].str.upper() != 'NAN']
     
     return result
+
+
+def aggregate_by_code(df: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate rows by code: sum quantities and take first non-empty product"""
+    # Group by Código and aggregate
+    def first_non_empty(series):
+        for val in series:
+            if val and str(val).strip() and str(val).strip().upper() != 'NAN':
+                return val
+        return ''
+    
+    aggregated = df.groupby('Código', as_index=False).agg({
+        'Producto': first_non_empty,
+        'Cantidad': 'sum'
+    })
+    return aggregated
 
 
 def process_excel_file(file_content: bytes, filename: str) -> Tuple[pd.DataFrame, Dict[str, str]]:
@@ -183,7 +279,10 @@ def process_excel_file(file_content: bytes, filename: str) -> Tuple[pd.DataFrame
     # Clean dataframe
     cleaned_df = clean_dataframe(df, codigo_col, producto_col, cantidad_col)
     
-    return cleaned_df, detected
+    # Aggregate duplicates by code (sum quantities, take first non-empty product)
+    aggregated_df = aggregate_by_code(cleaned_df)
+    
+    return aggregated_df, detected
 
 
 def compare_dataframes(df1: pd.DataFrame, df2: pd.DataFrame) -> Dict[str, pd.DataFrame]:
@@ -213,9 +312,10 @@ def compare_dataframes(df1: pd.DataFrame, df2: pd.DataFrame) -> Dict[str, pd.Dat
     # Calculate difference
     merged['Diferencia'] = merged['Cantidad_Archivo1'] - merged['Cantidad_Archivo2']
     
-    # Combine product names
-    merged['Producto'] = merged['Producto_Archivo1'].fillna('') + merged['Producto_Archivo2'].fillna('')
-    merged['Producto'] = merged['Producto'].str.strip()
+    # Combine product names using coalesce (prefer file1, fallback to file2)
+    merged['Producto'] = merged['Producto_Archivo1'].fillna('').replace('', pd.NA)
+    merged['Producto'] = merged['Producto'].fillna(merged['Producto_Archivo2'].fillna(''))
+    merged['Producto'] = merged['Producto'].fillna('').astype(str).str.strip()
     
     # Create different views
     comparison_complete = merged[['Código', 'Producto', 'Cantidad_Archivo1', 'Cantidad_Archivo2', 'Diferencia']].copy()

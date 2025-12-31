@@ -1,10 +1,16 @@
+"""
+Authentication module with SQLite backend
+- Closed registration (admin only can create users)
+- JWT tokens with secure handling
+"""
 from datetime import datetime, timedelta
 from typing import Optional
-import json
 import os
 import secrets
 from passlib.context import CryptContext
 from jose import JWTError, jwt
+
+from database import get_user, get_user_by_email, create_user, migrate_from_json
 
 # Configuration - SECRET_KEY must be set in production
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -23,22 +29,11 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 # Password hashing - using sha256 for better compatibility
 pwd_context = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
 
-# Users file path
-USERS_FILE = os.path.join(os.path.dirname(__file__), "users.json")
-
-
-def load_users() -> dict:
-    """Load users from JSON file"""
-    if os.path.exists(USERS_FILE):
-        with open(USERS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {}
-
-
-def save_users(users: dict):
-    """Save users to JSON file"""
-    with open(USERS_FILE, "w", encoding="utf-8") as f:
-        json.dump(users, f, indent=2, ensure_ascii=False)
+# Migrate existing users from JSON to SQLite (one-time)
+LEGACY_USERS_FILE = os.path.join(os.path.dirname(__file__), "users.json")
+if os.path.exists(LEGACY_USERS_FILE):
+    migrate_from_json(LEGACY_USERS_FILE)
+    print("✅ Migrated users from JSON to SQLite")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -75,44 +70,71 @@ def verify_token(token: str) -> Optional[str]:
         return None
 
 
-def register_user(username: str, email: str, password: str) -> dict:
-    """Register a new user"""
-    users = load_users()
+def is_admin(username: str) -> bool:
+    """Check if user is an admin"""
+    user = get_user(username)
+    return user is not None and user.get("is_admin", 0) == 1
+
+
+def register_user(username: str, email: str, password: str, by_admin: str = None) -> dict:
+    """
+    Register a new user
+    - If by_admin is provided, checks that they are admin
+    - Otherwise registration is closed
+    """
+    # Check if registration is allowed
+    if by_admin:
+        if not is_admin(by_admin):
+            return {"success": False, "error": "Solo administradores pueden crear usuarios"}
+    else:
+        # Public registration is disabled - for security
+        # To enable, remove this block
+        return {"success": False, "error": "El registro público está deshabilitado. Contacte al administrador."}
     
     # Check if username exists
-    if username in users:
+    if get_user(username):
         return {"success": False, "error": "El usuario ya existe"}
     
     # Check if email exists
-    for user_data in users.values():
-        if user_data.get("email") == email:
-            return {"success": False, "error": "El email ya está registrado"}
+    if get_user_by_email(email):
+        return {"success": False, "error": "El email ya está registrado"}
     
     # Create user
-    users[username] = {
-        "email": email,
-        "password": get_password_hash(password),
-        "created_at": datetime.utcnow().isoformat()
-    }
-    save_users(users)
+    password_hash = get_password_hash(password)
+    if create_user(username, email, password_hash, is_admin=False):
+        return {"success": True}
+    else:
+        return {"success": False, "error": "Error al crear usuario"}
+
+
+def register_admin(username: str, email: str, password: str) -> dict:
+    """Register an admin user (for initial setup only)"""
+    if get_user(username):
+        return {"success": False, "error": "El usuario ya existe"}
     
-    return {"success": True}
+    if get_user_by_email(email):
+        return {"success": False, "error": "El email ya está registrado"}
+    
+    password_hash = get_password_hash(password)
+    if create_user(username, email, password_hash, is_admin=True):
+        return {"success": True}
+    else:
+        return {"success": False, "error": "Error al crear admin"}
 
 
 def authenticate_user(username: str, password: str) -> Optional[str]:
     """Authenticate a user and return a token"""
-    users = load_users()
+    user = get_user(username)
     
-    if username not in users:
+    if not user:
         return None
     
-    user = users[username]
-    if not verify_password(password, user["password"]):
+    if not verify_password(password, user["password_hash"]):
         return None
     
-    # Create token
+    # Create token with admin flag
     access_token = create_access_token(
-        data={"sub": username},
+        data={"sub": username, "is_admin": user.get("is_admin", 0) == 1},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     return access_token
