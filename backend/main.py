@@ -266,6 +266,10 @@ async def serve_index():
 async def serve_app():
     return FileResponse(os.path.join(FRONTEND_DIR, "app.html"))
 
+@app.get("/api/version")
+async def get_version():
+    return {"version": "2.1", "feature": "admin_panel"}
+
 @app.get("/admin.html")
 async def serve_admin_html():
     return FileResponse(os.path.join(FRONTEND_DIR, "admin.html"))
