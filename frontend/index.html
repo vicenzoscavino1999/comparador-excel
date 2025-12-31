@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comparador Excel - Login</title>
+    <meta name="description" content="Compara archivos Excel de forma rápida y sencilla">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+
+<body class="auth-page">
+    <div class="auth-container">
+        <div class="auth-card">
+            <!-- Logo and Title -->
+            <div class="auth-header">
+                <div class="logo">
+                    <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="48" height="48" rx="12" fill="url(#gradient)" />
+                        <path d="M14 16h20v4H14v-4zm0 6h12v4H14v-4zm0 6h16v4H14v-4z" fill="white" opacity="0.9" />
+                        <path d="M30 24l6 6m0-6l-6 6" stroke="white" stroke-width="2" stroke-linecap="round" />
+                        <defs>
+                            <linearGradient id="gradient" x1="0" y1="0" x2="48" y2="48">
+                                <stop stop-color="#10B981" />
+                                <stop offset="1" stop-color="#2563EB" />
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <h1>Comparador Excel</h1>
+                <p class="subtitle">Compara archivos Excel en segundos</p>
+            </div>
+
+            <!-- Login Form -->
+            <form id="loginForm" class="auth-form">
+                <div class="form-group">
+                    <label for="loginUsername">Usuario</label>
+                    <input type="text" id="loginUsername" name="username" required placeholder="Tu nombre de usuario">
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Contraseña</label>
+                    <input type="password" id="loginPassword" name="password" required placeholder="Tu contraseña">
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <span>Iniciar Sesión</span>
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M4 10h12m-4-4l4 4-4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                    </svg>
+                </button>
+            </form>
+
+            <div class="auth-divider">
+                <span>o</span>
+            </div>
+
+            <!-- Register Form (hidden by default) -->
+            <form id="registerForm" class="auth-form hidden">
+                <div class="form-group">
+                    <label for="regUsername">Usuario</label>
+                    <input type="text" id="regUsername" name="username" required
+                        placeholder="Elige un nombre de usuario">
+                </div>
+                <div class="form-group">
+                    <label for="regEmail">Email</label>
+                    <input type="email" id="regEmail" name="email" required placeholder="tu@email.com">
+                </div>
+                <div class="form-group">
+                    <label for="regPassword">Contraseña</label>
+                    <input type="password" id="regPassword" name="password" required placeholder="Mínimo 6 caracteres"
+                        minlength="6">
+                </div>
+                <button type="submit" class="btn btn-secondary">
+                    <span>Crear Cuenta</span>
+                </button>
+            </form>
+
+            <!-- Toggle between login/register -->
+            <div class="auth-toggle">
+                <p id="toggleText">¿No tienes cuenta?</p>
+                <button type="button" id="toggleBtn" class="btn-link">Regístrate aquí</button>
+            </div>
+
+            <!-- Error/Success messages -->
+            <div id="authMessage" class="auth-message hidden"></div>
+        </div>
+
+        <!-- Background decoration -->
+        <div class="auth-decoration">
+            <div class="blob blob-1"></div>
+            <div class="blob blob-2"></div>
+        </div>
+    </div>
+
+    <script src="/js/auth.js"></script>
+</body>
+
+</html>
