@@ -1,171 +1,252 @@
 """
-Database module - SQLite storage for users
-Replaces the JSON-based storage for enterprise-level security
+Database module - PostgreSQL/SQLite hybrid storage
+Uses PostgreSQL if DATABASE_URL is set, otherwise falls back to SQLite
 """
-import sqlite3
 import os
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from contextlib import contextmanager
 
-# Database file path
-DB_FILE = os.path.join(os.path.dirname(__file__), "database.db")
+# Check if PostgreSQL URL is provided
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-
-@contextmanager
-def get_db():
-    """Get database connection with context manager"""
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    try:
-        yield conn
-    finally:
-        conn.close()
-
-
-def init_db():
-    """Initialize the database with required tables"""
-    with get_db() as conn:
+if DATABASE_URL:
+    # Use PostgreSQL
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+    
+    def get_db():
+        """Get PostgreSQL connection"""
+        # Render uses postgres:// but psycopg2 needs postgresql://
+        url = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+        conn = psycopg2.connect(url, cursor_factory=RealDictCursor)
+        return conn
+    
+    def init_db():
+        """Initialize PostgreSQL tables"""
+        conn = get_db()
         cursor = conn.cursor()
         
         # Create users table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                email TEXT UNIQUE NOT NULL,
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(100) UNIQUE NOT NULL,
+                email VARCHAR(255) UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
-                is_admin INTEGER DEFAULT 0,
-                created_at TEXT NOT NULL
+                is_admin BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
-        # Create comparison_logs table for tracking usage
+        # Create comparison_logs table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS comparison_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT NOT NULL,
-                file1_name TEXT,
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(100) NOT NULL,
+                file1_name VARCHAR(255),
                 file1_size INTEGER,
-                file2_name TEXT,
+                file2_name VARCHAR(255),
                 file2_size INTEGER,
                 records_compared INTEGER,
                 differences_found INTEGER,
-                created_at TEXT NOT NULL
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
         conn.commit()
+        cursor.close()
+        conn.close()
+        print("✅ PostgreSQL database initialized")
 
+else:
+    # Fallback to SQLite
+    import sqlite3
+    
+    DB_FILE = os.path.join(os.path.dirname(__file__), "database.db")
+    
+    @contextmanager
+    def get_db():
+        """Get SQLite connection"""
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row
+        try:
+            yield conn
+        finally:
+            conn.close()
+    
+    def init_db():
+        """Initialize SQLite tables"""
+        with get_db() as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    email TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    is_admin INTEGER DEFAULT 0,
+                    created_at TEXT NOT NULL
+                )
+            ''')
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS comparison_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT NOT NULL,
+                    file1_name TEXT,
+                    file1_size INTEGER,
+                    file2_name TEXT,
+                    file2_size INTEGER,
+                    records_compared INTEGER,
+                    differences_found INTEGER,
+                    created_at TEXT NOT NULL
+                )
+            ''')
+            
+            conn.commit()
+        print("✅ SQLite database initialized")
+
+
+# ============== Common Functions ==============
 
 def get_user(username: str) -> Optional[Dict[str, Any]]:
     """Get user by username"""
-    with get_db() as conn:
+    if DATABASE_URL:
+        conn = get_db()
         cursor = conn.cursor()
-        cursor.execute(
-            'SELECT * FROM users WHERE username = ?',
-            (username,)
-        )
+        cursor.execute('SELECT * FROM users WHERE username = %s', (username,))
         row = cursor.fetchone()
-        if row:
-            return dict(row)
-    return None
+        cursor.close()
+        conn.close()
+        return dict(row) if row else None
+    else:
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM users WHERE username = ?', (username,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
 
 
 def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
     """Get user by email"""
-    with get_db() as conn:
+    if DATABASE_URL:
+        conn = get_db()
         cursor = conn.cursor()
-        cursor.execute(
-            'SELECT * FROM users WHERE email = ?',
-            (email,)
-        )
+        cursor.execute('SELECT * FROM users WHERE email = %s', (email,))
         row = cursor.fetchone()
-        if row:
-            return dict(row)
-    return None
+        cursor.close()
+        conn.close()
+        return dict(row) if row else None
+    else:
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM users WHERE email = ?', (email,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
 
 
 def create_user(username: str, email: str, password_hash: str, is_admin: bool = False) -> bool:
     """Create a new user"""
     try:
-        with get_db() as conn:
+        if DATABASE_URL:
+            conn = get_db()
             cursor = conn.cursor()
             cursor.execute(
                 '''INSERT INTO users (username, email, password_hash, is_admin, created_at)
-                   VALUES (?, ?, ?, ?, ?)''',
-                (username, email, password_hash, 1 if is_admin else 0, datetime.utcnow().isoformat())
+                   VALUES (%s, %s, %s, %s, %s)''',
+                (username, email, password_hash, is_admin, datetime.utcnow())
             )
             conn.commit()
-            return True
-    except sqlite3.IntegrityError:
+            cursor.close()
+            conn.close()
+        else:
+            with get_db() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    '''INSERT INTO users (username, email, password_hash, is_admin, created_at)
+                       VALUES (?, ?, ?, ?, ?)''',
+                    (username, email, password_hash, 1 if is_admin else 0, datetime.utcnow().isoformat())
+                )
+                conn.commit()
+        return True
+    except Exception as e:
+        print(f"Error creating user: {e}")
         return False
 
 
-def get_all_users() -> list:
-    """Get all users (admin only function)"""
-    with get_db() as conn:
+def get_all_users() -> List[Dict[str, Any]]:
+    """Get all users"""
+    if DATABASE_URL:
+        conn = get_db()
         cursor = conn.cursor()
         cursor.execute('SELECT id, username, email, is_admin, created_at FROM users')
-        return [dict(row) for row in cursor.fetchall()]
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return [dict(row) for row in rows]
+    else:
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT id, username, email, is_admin, created_at FROM users')
+            return [dict(row) for row in cursor.fetchall()]
 
 
-def log_comparison(username: str, file1_name: str, file1_size: int, 
-                   file2_name: str, file2_size: int, 
+def log_comparison(username: str, file1_name: str, file1_size: int,
+                   file2_name: str, file2_size: int,
                    records_compared: int, differences_found: int):
     """Log a comparison operation"""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            '''INSERT INTO comparison_logs 
-               (username, file1_name, file1_size, file2_name, file2_size, 
-                records_compared, differences_found, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-            (username, file1_name, file1_size, file2_name, file2_size,
-             records_compared, differences_found, datetime.utcnow().isoformat())
-        )
-        conn.commit()
-
-
-def migrate_from_json(json_file: str):
-    """Migrate users from JSON file to SQLite (one-time migration)"""
-    import json
-    from passlib.context import CryptContext
-    
-    if not os.path.exists(json_file):
-        return
-    
-    with open(json_file, 'r', encoding='utf-8') as f:
-        users = json.load(f)
-    
-    for username, data in users.items():
-        # Check if user already exists
-        if not get_user(username):
+    try:
+        if DATABASE_URL:
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute(
+                '''INSERT INTO comparison_logs 
+                   (username, file1_name, file1_size, file2_name, file2_size, 
+                    records_compared, differences_found, created_at)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)''',
+                (username, file1_name, file1_size, file2_name, file2_size,
+                 records_compared, differences_found, datetime.utcnow())
+            )
+            conn.commit()
+            cursor.close()
+            conn.close()
+        else:
             with get_db() as conn:
                 cursor = conn.cursor()
-                try:
-                    cursor.execute(
-                        '''INSERT INTO users (username, email, password_hash, is_admin, created_at)
-                           VALUES (?, ?, ?, ?, ?)''',
-                        (username, data.get('email', ''), data.get('password', ''),
-                         1 if username == 'admin' else 0, 
-                         data.get('created_at', datetime.utcnow().isoformat()))
-                    )
-                    conn.commit()
-                except sqlite3.IntegrityError:
-                    pass
+                cursor.execute(
+                    '''INSERT INTO comparison_logs 
+                       (username, file1_name, file1_size, file2_name, file2_size, 
+                        records_compared, differences_found, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                    (username, file1_name, file1_size, file2_name, file2_size,
+                     records_compared, differences_found, datetime.utcnow().isoformat())
+                )
+                conn.commit()
+    except Exception as e:
+        print(f"Error logging comparison: {e}")
+
+
 def ensure_default_admin():
-    """Create a default admin from environment variables if no users exist"""
+    """Create default admin from environment variables if no users exist"""
     from passlib.context import CryptContext
     
     # Check if any users exist
-    with get_db() as conn:
+    if DATABASE_URL:
+        conn = get_db()
         cursor = conn.cursor()
-        cursor.execute('SELECT COUNT(*) FROM users')
-        count = cursor.fetchone()[0]
+        cursor.execute('SELECT COUNT(*) as count FROM users')
+        count = cursor.fetchone()['count']
+        cursor.close()
+        conn.close()
+    else:
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT COUNT(*) FROM users')
+            count = cursor.fetchone()[0]
     
     if count == 0:
-        # No users exist, create admin from env vars
         admin_user = os.getenv("ADMIN_USER", "admin")
         admin_email = os.getenv("ADMIN_EMAIL", "admin@example.com")
         admin_password = os.getenv("ADMIN_PASSWORD")
@@ -175,15 +256,13 @@ def ensure_default_admin():
             password_hash = pwd_context.hash(admin_password)
             
             if create_user(admin_user, admin_email, password_hash, is_admin=True):
-                print(f"✅ Default admin user '{admin_user}' created from environment variables")
+                print(f"✅ Default admin '{admin_user}' created")
             else:
-                print(f"⚠️ Could not create admin user")
+                print("⚠️ Could not create admin")
         else:
-            print("ℹ️ No ADMIN_PASSWORD set. Set ADMIN_USER, ADMIN_EMAIL, ADMIN_PASSWORD to auto-create admin.")
+            print("ℹ️ Set ADMIN_PASSWORD env var to auto-create admin")
 
 
-# Initialize database on import
+# Initialize on import
 init_db()
-
-# Create default admin if needed
 ensure_default_admin()

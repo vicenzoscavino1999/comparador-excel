@@ -1,5 +1,5 @@
 """
-Authentication module with SQLite backend
+Authentication module with PostgreSQL/SQLite backend
 - Closed registration (admin only can create users)
 - JWT tokens with secure handling
 """
@@ -10,7 +10,7 @@ import secrets
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 
-from database import get_user, get_user_by_email, create_user, migrate_from_json
+from database import get_user, get_user_by_email, create_user
 
 # Configuration - SECRET_KEY must be set in production
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -28,12 +28,6 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 
 # Password hashing - using sha256 for better compatibility
 pwd_context = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
-
-# Migrate existing users from JSON to SQLite (one-time)
-LEGACY_USERS_FILE = os.path.join(os.path.dirname(__file__), "users.json")
-if os.path.exists(LEGACY_USERS_FILE):
-    migrate_from_json(LEGACY_USERS_FILE)
-    print("✅ Migrated users from JSON to SQLite")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
