@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Comparador Excel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/styles.css">
+    <style>
+        .admin-container {
+            max-width: 900px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+
+        .admin-card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+
+        .admin-card h2 {
+            margin-bottom: 1.5rem;
+            color: #1e293b;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: #475569;
+        }
+
+        .form-group input {
+            padding: 0.75rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #10B981;
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+        }
+
+        .users-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .users-table th,
+        .users-table td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .users-table th {
+            background: #f8fafc;
+            font-weight: 600;
+            color: #475569;
+        }
+
+        .users-table tr:hover {
+            background: #f8fafc;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge-admin {
+            background: #dbeafe;
+            color: #1d4ed8;
+        }
+
+        .badge-user {
+            background: #f1f5f9;
+            color: #64748b;
+        }
+
+        .success-message {
+            background: #d1fae5;
+            color: #065f46;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        .error-message {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        .btn-create {
+            background: linear-gradient(135deg, #10B981, #2563EB);
+            color: white;
+            padding: 0.75rem 2rem;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn-create:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #64748b;
+            text-decoration: none;
+            margin-bottom: 1rem;
+        }
+
+        .back-link:hover {
+            color: #10B981;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 2rem;
+            color: #64748b;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #64748b;
+        }
+    </style>
+</head>
+
+<body class="app-page">
+    <header class="app-header">
+        <div class="header-content">
+            <div class="header-left">
+                <div class="logo-small">
+                    <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+                        <rect width="48" height="48" rx="12" fill="url(#gradient3)" />
+                        <path d="M14 16h20v4H14v-4zm0 6h12v4H14v-4zm0 6h16v4H14v-4z" fill="white" opacity="0.9" />
+                        <path d="M30 24l6 6m0-6l-6 6" stroke="white" stroke-width="2" stroke-linecap="round" />
+                        <defs>
+                            <linearGradient id="gradient3" x1="0" y1="0" x2="48" y2="48">
+                                <stop stop-color="#10B981" />
+                                <stop offset="1" stop-color="#2563EB" />
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <h1>Panel de Administración</h1>
+            </div>
+            <div class="header-right">
+                <span id="userDisplay" class="user-name"></span>
+                <button id="logoutBtn" class="btn btn-ghost">Cerrar Sesión</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="app-main">
+        <div class="admin-container">
+            <a href="/app.html" class="back-link">← Volver al Comparador</a>
+
+            <!-- Create User Form -->
+            <div class="admin-card">
+                <h2>👤 Crear Nuevo Usuario</h2>
+                <div id="successMessage" class="success-message"></div>
+                <div id="errorMessage" class="error-message"></div>
+
+                <form id="createUserForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="username">Nombre de usuario</label>
+                            <input type="text" id="username" required placeholder="ej: juan.perez">
+                        </div>
+                        <div class="form-group">
+                            <label for="email">Correo electrónico</label>
+                            <input type="email" id="email" required placeholder="ej: juan@empresa.com">
+                        </div>
+                        <div class="form-group">
+                            <label for="password">Contraseña</label>
+                            <input type="password" id="password" required placeholder="Mínimo 6 caracteres">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-create">Crear Usuario</button>
+                </form>
+            </div>
+
+            <!-- Users List -->
+            <div class="admin-card">
+                <h2>📋 Usuarios Registrados</h2>
+                <div id="usersLoading" class="loading">Cargando usuarios...</div>
+                <div id="usersEmpty" class="empty-state" style="display:none">No hay usuarios registrados</div>
+                <table class="users-table" id="usersTable" style="display:none">
+                    <thead>
+                        <tr>
+                            <th>Usuario</th>
+                            <th>Email</th>
+                            <th>Rol</th>
+                            <th>Creado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_URL = '';
+
+        // Check authentication
+        function checkAuth() {
+            const token = localStorage.getItem('token');
+            const user = localStorage.getItem('user');
+
+            if (!token || !user) {
+                window.location.href = '/';
+                return null;
+            }
+
+            document.getElementById('userDisplay').textContent = user;
+            return { token, user };
+        }
+
+        // Logout
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = '/';
+        });
+
+        // Load users
+        async function loadUsers() {
+            const auth = checkAuth();
+            if (!auth) return;
+
+            try {
+                const response = await fetch(`${API_URL}/api/users`, {
+                    headers: {
+                        'Authorization': `Bearer ${auth.token}`
+                    }
+                });
+
+                if (response.status === 403) {
+                    document.getElementById('usersLoading').textContent = 'No tienes permisos de administrador';
+                    return;
+                }
+
+                if (!response.ok) throw new Error('Error loading users');
+
+                const users = await response.json();
+
+                document.getElementById('usersLoading').style.display = 'none';
+
+                if (users.length === 0) {
+                    document.getElementById('usersEmpty').style.display = 'block';
+                    return;
+                }
+
+                const tbody = document.getElementById('usersBody');
+                tbody.innerHTML = users.map(user => `
+                    <tr>
+                        <td><strong>${user.username}</strong></td>
+                        <td>${user.email}</td>
+                        <td>
+                            <span class="badge ${user.is_admin ? 'badge-admin' : 'badge-user'}">
+                                ${user.is_admin ? 'Admin' : 'Usuario'}
+                            </span>
+                        </td>
+                        <td>${new Date(user.created_at).toLocaleDateString('es-PE')}</td>
+                    </tr>
+                `).join('');
+
+                document.getElementById('usersTable').style.display = 'table';
+
+            } catch (error) {
+                document.getElementById('usersLoading').textContent = 'Error al cargar usuarios';
+                console.error(error);
+            }
+        }
+
+        // Create user form
+        document.getElementById('createUserForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const auth = checkAuth();
+            if (!auth) return;
+
+            const username = document.getElementById('username').value;
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            const successMsg = document.getElementById('successMessage');
+            const errorMsg = document.getElementById('errorMessage');
+
+            successMsg.style.display = 'none';
+            errorMsg.style.display = 'none';
+
+            try {
+                const response = await fetch(`${API_URL}/api/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${auth.token}`
+                    },
+                    body: JSON.stringify({ username, email, password })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Error al crear usuario');
+                }
+
+                successMsg.textContent = `✅ Usuario "${username}" creado exitosamente`;
+                successMsg.style.display = 'block';
+
+                // Clear form
+                document.getElementById('createUserForm').reset();
+
+                // Reload users list
+                loadUsers();
+
+            } catch (error) {
+                errorMsg.textContent = `❌ ${error.message}`;
+                errorMsg.style.display = 'block';
+            }
+        });
+
+        // Initialize
+        checkAuth();
+        loadUsers();
+    </script>
+</body>
+
+</html>

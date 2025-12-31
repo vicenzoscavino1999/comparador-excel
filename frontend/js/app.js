@@ -1,5 +1,5 @@
 // Check authentication
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     const token = localStorage.getItem('token');
     const username = localStorage.getItem('username');
 
@@ -10,6 +10,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Display username
     document.getElementById('userDisplay').textContent = `Hola, ${username}`;
+
+    // Check if user is admin (try to access admin endpoint)
+    try {
+        const response = await fetch('/api/users', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+            const adminLink = document.getElementById('adminLink');
+            if (adminLink) adminLink.style.display = 'inline-block';
+        }
+    } catch (e) { /* Not admin, ignore */ }
 });
 
 // Logout
