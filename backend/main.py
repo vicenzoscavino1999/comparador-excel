@@ -294,14 +294,26 @@ async def compare_files(
 
 # Serve frontend
 FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend")
+logger.info(f"Frontend directory: {FRONTEND_DIR}, exists: {os.path.exists(FRONTEND_DIR)}")
 
 @app.get("/")
 async def serve_index():
-    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
+    file_path = os.path.join(FRONTEND_DIR, "index.html")
+    if not os.path.exists(file_path):
+        logger.error(f"index.html not found at: {file_path}")
+        raise HTTPException(status_code=404, detail=f"Frontend not found. Check deployment configuration.")
+    return FileResponse(file_path)
 
+@app.get("/index.html")
+async def serve_index_html():
+    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
 
 @app.get("/app")
 async def serve_app():
+    return FileResponse(os.path.join(FRONTEND_DIR, "app.html"))
+
+@app.get("/app.html")
+async def serve_app_html():
     return FileResponse(os.path.join(FRONTEND_DIR, "app.html"))
 
 @app.get("/api/version")
