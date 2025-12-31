@@ -10,9 +10,7 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/*
+# No additional system dependencies needed for this app
 
 # Copy requirements first for better caching
 COPY backend/requirements.txt ./requirements.txt

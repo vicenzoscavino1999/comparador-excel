@@ -67,7 +67,7 @@ def verify_token(token: str) -> Optional[str]:
 def is_admin(username: str) -> bool:
     """Check if user is an admin"""
     user = get_user(username)
-    return user is not None and user.get("is_admin", 0) == 1
+    return user is not None and bool(user.get("is_admin", False))
 
 
 def register_user(username: str, email: str, password: str, by_admin: str = None) -> dict:
@@ -128,7 +128,7 @@ def authenticate_user(username: str, password: str) -> Optional[str]:
     
     # Create token with admin flag
     access_token = create_access_token(
-        data={"sub": username, "is_admin": user.get("is_admin", 0) == 1},
+        data={"sub": username, "is_admin": bool(user.get("is_admin", False))},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     return access_token
