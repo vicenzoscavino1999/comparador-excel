@@ -1,9 +1,14 @@
+/**
+ * Authentication Page JavaScript
+ * Handles login form with validation and consistent routing
+ */
+
 // Check if user is already logged in
 document.addEventListener('DOMContentLoaded', () => {
     const token = localStorage.getItem('token');
     if (token) {
-        // Redirect to app if already logged in
-        window.location.href = '/app';
+        // Redirect to app if already logged in (consistent route)
+        window.location.href = '/app.html';
     }
 });
 
@@ -28,8 +33,19 @@ loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     hideMessage();
 
-    const username = document.getElementById('loginUsername').value;
+    const username = document.getElementById('loginUsername').value.trim();
     const password = document.getElementById('loginPassword').value;
+
+    // Basic validation
+    if (!username || username.length < 3) {
+        showMessage('El usuario debe tener al menos 3 caracteres', true);
+        return;
+    }
+
+    if (!password || password.length < 6) {
+        showMessage('La contraseña debe tener al menos 6 caracteres', true);
+        return;
+    }
 
     const submitBtn = loginForm.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
@@ -51,7 +67,7 @@ loginForm.addEventListener('submit', async (e) => {
             localStorage.setItem('username', username);
             showMessage('¡Inicio de sesión exitoso! Redirigiendo...');
             setTimeout(() => {
-                window.location.href = '/app';
+                window.location.href = '/app.html'; // Consistent route
             }, 1000);
         } else {
             showMessage(data.detail || 'Error al iniciar sesión', true);

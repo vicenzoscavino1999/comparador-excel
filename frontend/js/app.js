@@ -1,10 +1,19 @@
-// Check authentication
+/**
+ * Main Application JavaScript
+ * Excel comparison functionality with cancel support and improved error handling
+ */
+
+// AbortController for cancellable requests
+let currentAbortController = null;
+
+// Check authentication on page load
 document.addEventListener('DOMContentLoaded', async () => {
-    const token = localStorage.getItem('token');
-    const username = localStorage.getItem('username');
+    // Use API wrapper functions if available, otherwise fallback
+    const token = typeof getToken === 'function' ? getToken() : localStorage.getItem('token');
+    const username = typeof getUsername === 'function' ? getUsername() : localStorage.getItem('username');
 
     if (!token) {
-        window.location.href = '/';
+        window.location.href = '/index.html';
         return;
     }
 
@@ -23,11 +32,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (e) { /* Not admin, ignore */ }
 });
 
-// Logout
+// Logout - use clearAuth if available
 document.getElementById('logoutBtn').addEventListener('click', () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('username');
-    window.location.href = '/';
+    if (typeof clearAuth === 'function') {
+        clearAuth();
+    } else {
+        localStorage.removeItem('token');
+        localStorage.removeItem('username');
+        window.location.href = '/index.html';
+    }
 });
 
 // File handling
@@ -66,13 +79,13 @@ function handleFileSelect(file, zoneNumber) {
     const ext = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
 
     if (!validExtensions.includes(ext)) {
-        alert('Solo se permiten archivos .xls y .xlsx');
+        showError('Solo se permiten archivos .xls y .xlsx');
         return;
     }
 
     const maxSize = 100 * 1024 * 1024; // 100MB
     if (file.size > maxSize) {
-        alert('El archivo excede el límite de 100MB');
+        showError('El archivo excede el límite de 100MB');
         return;
     }
 
@@ -87,6 +100,12 @@ function handleFileSelect(file, zoneNumber) {
     }
 
     updateCompareButton();
+}
+
+// Show error message
+function showError(message) {
+    errorSection.classList.remove('hidden');
+    document.getElementById('errorMessage').textContent = message;
 }
 
 // Update file info display
@@ -157,15 +176,38 @@ document.querySelectorAll('.btn-remove').forEach(btn => {
     });
 });
 
+// Cancel comparison
+function cancelComparison() {
+    if (currentAbortController) {
+        currentAbortController.abort();
+        currentAbortController = null;
+    }
+    resetCompareState();
+}
+
+// Reset compare button state
+function resetCompareState() {
+    progressSection.classList.add('hidden');
+    compareBtn.disabled = false;
+    compareBtn.innerHTML = '<span>Comparar Archivos</span><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    updateCompareButton();
+}
+
 // Compare files
 compareBtn.addEventListener('click', async () => {
     if (!file1 || !file2) return;
 
-    const token = localStorage.getItem('token');
+    // Prevent double click
+    if (compareBtn.disabled) return;
+
+    const token = typeof getToken === 'function' ? getToken() : localStorage.getItem('token');
     if (!token) {
-        window.location.href = '/';
+        window.location.href = '/index.html';
         return;
     }
+
+    // Create AbortController for cancellation
+    currentAbortController = new AbortController();
 
     // Show progress
     progressSection.classList.remove('hidden');
@@ -185,8 +227,21 @@ compareBtn.addEventListener('click', async () => {
             headers: {
                 'Authorization': `Bearer ${token}`
             },
-            body: formData
+            body: formData,
+            signal: currentAbortController.signal
         });
+
+        // Handle auth errors
+        if (response.status === 401) {
+            if (typeof clearAuth === 'function') {
+                clearAuth();
+            } else {
+                localStorage.removeItem('token');
+                localStorage.removeItem('username');
+                window.location.href = '/index.html';
+            }
+            return;
+        }
 
         if (response.ok) {
             // Get the blob
@@ -206,12 +261,17 @@ compareBtn.addEventListener('click', async () => {
 
     } catch (error) {
         progressSection.classList.add('hidden');
+
+        // Don't show error if it was cancelled
+        if (error.name === 'AbortError') {
+            return;
+        }
+
         errorSection.classList.remove('hidden');
         document.getElementById('errorMessage').textContent = error.message;
     } finally {
-        compareBtn.disabled = false;
-        compareBtn.innerHTML = '<span>Comparar Archivos</span><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-        updateCompareButton();
+        currentAbortController = null;
+        resetCompareState();
     }
 });
 
@@ -238,3 +298,9 @@ document.getElementById('tryAgain').addEventListener('click', () => {
     removeFile(1);
     removeFile(2);
 });
+
+// Cancel button (if exists in HTML)
+const cancelBtn = document.getElementById('cancelBtn');
+if (cancelBtn) {
+    cancelBtn.addEventListener('click', cancelComparison);
+}

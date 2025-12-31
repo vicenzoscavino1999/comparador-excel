@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin - Comparador Excel</title>
+    <meta name="description" content="Panel de administración del Comparador Excel">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -132,9 +133,14 @@
             transition: transform 0.2s, box-shadow 0.2s;
         }
 
-        .btn-create:hover {
+        .btn-create:hover:not(:disabled) {
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-create:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
         }
 
         .back-link {
@@ -203,8 +209,9 @@
                 <form id="createUserForm">
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="username">Nombre de usuario</label>
-                            <input type="text" id="username" required placeholder="ej: juan.perez">
+                            <label for="newUsername">Nombre de usuario</label>
+                            <input type="text" id="newUsername" required placeholder="ej: juan.perez" minlength="3"
+                                maxlength="50" pattern="[a-zA-Z0-9._-]+">
                         </div>
                         <div class="form-group">
                             <label for="email">Correo electrónico</label>
@@ -212,7 +219,8 @@
                         </div>
                         <div class="form-group">
                             <label for="password">Contraseña</label>
-                            <input type="password" id="password" required placeholder="Mínimo 6 caracteres">
+                            <input type="password" id="password" required placeholder="Mínimo 6 caracteres"
+                                minlength="6" maxlength="100">
                         </div>
                     </div>
                     <button type="submit" class="btn-create">Crear Usuario</button>
@@ -239,132 +247,9 @@
         </div>
     </main>
 
-    <script>
-        const API_URL = '';
-
-        // Check authentication
-        function checkAuth() {
-            const token = localStorage.getItem('token');
-            const username = localStorage.getItem('username');
-
-            if (!token || !username) {
-                window.location.href = '/';
-                return null;
-            }
-
-            document.getElementById('userDisplay').textContent = username;
-            return { token, username };
-        }
-
-        // Logout
-        document.getElementById('logoutBtn').addEventListener('click', () => {
-            localStorage.removeItem('token');
-            localStorage.removeItem('username');
-            window.location.href = '/';
-        });
-
-        // Load users
-        async function loadUsers() {
-            const auth = checkAuth();
-            if (!auth) return;
-
-            try {
-                const response = await fetch(`${API_URL}/api/users`, {
-                    headers: {
-                        'Authorization': `Bearer ${auth.token}`
-                    }
-                });
-
-                if (response.status === 403) {
-                    document.getElementById('usersLoading').textContent = 'No tienes permisos de administrador';
-                    return;
-                }
-
-                if (!response.ok) throw new Error('Error loading users');
-
-                const users = await response.json();
-
-                document.getElementById('usersLoading').style.display = 'none';
-
-                if (users.length === 0) {
-                    document.getElementById('usersEmpty').style.display = 'block';
-                    return;
-                }
-
-                const tbody = document.getElementById('usersBody');
-                tbody.innerHTML = users.map(user => `
-                    <tr>
-                        <td><strong>${user.username}</strong></td>
-                        <td>${user.email}</td>
-                        <td>
-                            <span class="badge ${user.is_admin ? 'badge-admin' : 'badge-user'}">
-                                ${user.is_admin ? 'Admin' : 'Usuario'}
-                            </span>
-                        </td>
-                        <td>${new Date(user.created_at).toLocaleDateString('es-PE')}</td>
-                    </tr>
-                `).join('');
-
-                document.getElementById('usersTable').style.display = 'table';
-
-            } catch (error) {
-                document.getElementById('usersLoading').textContent = 'Error al cargar usuarios';
-                console.error(error);
-            }
-        }
-
-        // Create user form
-        document.getElementById('createUserForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            const auth = checkAuth();
-            if (!auth) return;
-
-            const username = document.getElementById('username').value;
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-
-            const successMsg = document.getElementById('successMessage');
-            const errorMsg = document.getElementById('errorMessage');
-
-            successMsg.style.display = 'none';
-            errorMsg.style.display = 'none';
-
-            try {
-                const response = await fetch(`${API_URL}/api/register`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${auth.token}`
-                    },
-                    body: JSON.stringify({ username, email, password })
-                });
-
-                const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(data.detail || 'Error al crear usuario');
-                }
-
-                successMsg.textContent = `✅ Usuario "${username}" creado exitosamente`;
-                successMsg.style.display = 'block';
-
-                // Clear form
-                document.getElementById('createUserForm').reset();
-
-                // Reload users list
-                loadUsers();
-
-            } catch (error) {
-                errorMsg.textContent = `❌ ${error.message}`;
-                errorMsg.style.display = 'block';
-            }
-        });
-
-        // Initialize
-        checkAuth();
-        loadUsers();
-    </script>
+    <!-- External JS files (no inline scripts for CSP compliance) -->
+    <script src="/js/api.js"></script>
+    <script src="/js/admin.js"></script>
 </body>
 
 </html>

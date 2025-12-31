@@ -60,6 +60,45 @@ else:
 MAX_FILE_SIZE = 100 * 1024 * 1024
 
 
+# Security Headers Middleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        
+        # Content Security Policy - allows scripts only from same origin
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "img-src 'self' data:; "
+            "connect-src 'self'"
+        )
+        
+        # Prevent MIME type sniffing
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        
+        # Prevent clickjacking
+        response.headers["X-Frame-Options"] = "DENY"
+        
+        # XSS Protection (for older browsers)
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        
+        # Referrer Policy
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        
+        return response
+
+
+# Add security headers in production
+if IS_PRODUCTION:
+    app.add_middleware(SecurityHeadersMiddleware)
+
+
 # Models
 class UserRegister(BaseModel):
     username: str
