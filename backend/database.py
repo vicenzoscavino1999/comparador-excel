@@ -154,7 +154,36 @@ def migrate_from_json(json_file: str):
                     conn.commit()
                 except sqlite3.IntegrityError:
                     pass
+def ensure_default_admin():
+    """Create a default admin from environment variables if no users exist"""
+    from passlib.context import CryptContext
+    
+    # Check if any users exist
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM users')
+        count = cursor.fetchone()[0]
+    
+    if count == 0:
+        # No users exist, create admin from env vars
+        admin_user = os.getenv("ADMIN_USER", "admin")
+        admin_email = os.getenv("ADMIN_EMAIL", "admin@example.com")
+        admin_password = os.getenv("ADMIN_PASSWORD")
+        
+        if admin_password:
+            pwd_context = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
+            password_hash = pwd_context.hash(admin_password)
+            
+            if create_user(admin_user, admin_email, password_hash, is_admin=True):
+                print(f"✅ Default admin user '{admin_user}' created from environment variables")
+            else:
+                print(f"⚠️ Could not create admin user")
+        else:
+            print("ℹ️ No ADMIN_PASSWORD set. Set ADMIN_USER, ADMIN_EMAIL, ADMIN_PASSWORD to auto-create admin.")
 
 
 # Initialize database on import
 init_db()
+
+# Create default admin if needed
+ensure_default_admin()
