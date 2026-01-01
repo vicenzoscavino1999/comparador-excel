@@ -26,8 +26,8 @@ if not SECRET_KEY:
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 
-# Password hashing - using sha256 for better compatibility
-pwd_context = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
+# Password hashing - using bcrypt (industry standard, secure against GPU attacks)
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:

@@ -3,8 +3,9 @@ Main FastAPI application with enterprise security features
 - Restricted CORS (configurable via env var)
 - Admin-only user registration
 - Comparison logging
+- Rate limiting on login
 """
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
@@ -12,10 +13,17 @@ from pydantic import BaseModel
 import os
 import logging
 from typing import Optional
+from collections import defaultdict
+from time import time
 
 from auth import register_user, authenticate_user, verify_token, is_admin, register_admin
 from excel_processor import process_comparison
 from database import log_comparison, get_all_users
+
+# Rate limiting storage (in production, use Redis)
+login_attempts = defaultdict(list)
+RATE_LIMIT_WINDOW = 60  # 1 minute
+MAX_LOGIN_ATTEMPTS = 5  # max 5 attempts per minute
 
 # Configure logging
 logging.basicConfig(
@@ -154,12 +162,30 @@ async def register(user: UserRegister, admin_user: str = Depends(get_admin_user)
 
 
 @app.post("/api/login")
-async def login(user: UserLogin):
+async def login(user: UserLogin, request: Request):
+    # Rate limiting by IP
+    client_ip = request.client.host if request.client else "unknown"
+    current_time = time()
+    
+    # Clean old attempts outside the window
+    login_attempts[client_ip] = [t for t in login_attempts[client_ip] if current_time - t < RATE_LIMIT_WINDOW]
+    
+    # Check if rate limited
+    if len(login_attempts[client_ip]) >= MAX_LOGIN_ATTEMPTS:
+        logger.warning(f"Rate limit exceeded for IP: {client_ip}")
+        raise HTTPException(status_code=429, detail="Demasiados intentos. Espera 1 minuto.")
+    
+    # Record this attempt
+    login_attempts[client_ip].append(current_time)
+    
     token = authenticate_user(user.username, user.password)
     if not token:
-        logger.warning(f"Failed login attempt for user: {user.username}")
+        logger.warning(f"Failed login attempt for user: {user.username} from IP: {client_ip}")
         raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
-    logger.info(f"User {user.username} logged in")
+    
+    # Clear attempts on successful login
+    login_attempts[client_ip] = []
+    logger.info(f"User {user.username} logged in from IP: {client_ip}")
     return {"access_token": token, "token_type": "bearer"}
 
 
@@ -220,7 +246,8 @@ async def preview_file(
         
     except Exception as e:
         logger.error(f"Preview error for {username}: {str(e)}")
-        raise HTTPException(status_code=400, detail=f"Error al analizar archivo: {str(e)}")
+        # Don't expose internal error details to client
+        raise HTTPException(status_code=400, detail="Error al analizar archivo. Verifica que sea un Excel válido.")
 
 # File comparison endpoint
 @app.post("/api/compare")
@@ -286,10 +313,12 @@ async def compare_files(
         
     except ValueError as e:
         logger.error(f"ValueError for {username}: {str(e)}")
+        # ValueError usually means column detection failed - safe to show
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error for {username}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error al procesar archivos: {str(e)}")
+        # Don't expose internal error details to client
+        raise HTTPException(status_code=500, detail="Error al procesar archivos. Intenta de nuevo o contacta soporte.")
 
 
 # Serve frontend
