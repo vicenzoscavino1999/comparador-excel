@@ -79,33 +79,51 @@ def read_excel_file(file_content: bytes, filename: str) -> pd.DataFrame:
 
 
 def assign_positional_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Assign column names based on data patterns when no headers exist"""
-    # Analyze each column to guess its purpose
+    """Assign column names based on data patterns when no headers exist.
+    
+    For files without headers, assumes typical inventory format:
+    - Column A (1st): Código (short numeric codes)
+    - Column B (2nd): Producto (text descriptions)  
+    - Column C (3rd): Cantidad (numeric quantities)
+    """
+    num_cols = len(df.columns)
+    
+    # Special case: exactly 3 columns - assume standard order: Código, Producto, Cantidad
+    if num_cols == 3:
+        df.columns = ['Código', 'Producto', 'Cantidad']
+        return df
+    
+    # For other cases, analyze each column to guess its purpose
     new_columns = []
     codigo_assigned = False
     cantidad_assigned = False
+    producto_assigned = False
     
     for i, col in enumerate(df.columns):
         col_data = df[col].dropna()
         if len(col_data) == 0:
             new_columns.append(f'Columna_{i}')
             continue
-            
-        # Check if mostly numeric (could be código or cantidad)
+        
+        # Check if mostly numeric
         numeric_count = pd.to_numeric(col_data, errors='coerce').notna().sum()
         is_mostly_numeric = numeric_count / len(col_data) > 0.7
         
-        # Check if looks like text descriptions (long strings)
+        # Check average string length
         avg_length = col_data.astype(str).str.len().mean()
         
+        # First numeric column with short values = Código
         if not codigo_assigned and is_mostly_numeric and avg_length < 15:
             new_columns.append('Código')
             codigo_assigned = True
+        # Long text = Producto (assign only once)
+        elif not producto_assigned and avg_length > 10 and not is_mostly_numeric:
+            new_columns.append('Producto')
+            producto_assigned = True
+        # Numeric column after código = Cantidad
         elif not cantidad_assigned and is_mostly_numeric and codigo_assigned:
             new_columns.append('Cantidad')
             cantidad_assigned = True
-        elif avg_length > 10:  # Likely product description
-            new_columns.append('Producto')
         else:
             new_columns.append(f'Columna_{i}')
     
